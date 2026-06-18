@@ -40,9 +40,10 @@ def set_app_name():
         except ImportError:
             pass
 
-# Add parent directory to path so we can import portfolio_manager
+# Add parent directory to path so we can import sibling modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from portfolio_manager import PortfolioManager
+import recommendation_engine
 
 class SearchableCombobox:
     def __init__(self, parent, values=None, width=30, **kwargs):
@@ -122,9 +123,12 @@ class StockAnalyzerGUI:
 
             self._all_tickers = []
             self._load_ticker_list()
+            self._rec_loading = False
             self._build_ui()
             # Defer initial chart update to ensure window shows up immediately
             self.root.after(100, self._update_charts)
+            # Auto-backtest & refresh the recommendations tab on every launch
+            self.root.after(400, self._refresh_recommendations)
         except Exception as e:
             print(f"STARTUP ERROR: {traceback.format_exc()}")
 
@@ -146,6 +150,11 @@ class StockAnalyzerGUI:
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Tab 0: Current Most Recommended Stocks (auto-refreshed on launch)
+        self.rec_tab = tk.Frame(self.notebook, bg="#1a1a2e")
+        self.notebook.add(self.rec_tab, text=" 💎 Top Recommendations ")
+        self._build_recommendations_tab(self.rec_tab)
 
         # Tab 1: Analyzer
         self.chart_tab = tk.Frame(self.notebook, bg="#1a1a2e")
@@ -178,6 +187,123 @@ class StockAnalyzerGUI:
             self.log_text.config(state=tk.DISABLED)
             self.root.update_idletasks()
         self.root.after(0, _app)
+
+    def _build_recommendations_tab(self, parent):
+        f = tk.Frame(parent, bg="#1a1a2e")
+        f.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
+
+        header = tk.Frame(f, bg="#1a1a2e")
+        header.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(header, text="CURRENT MOST RECOMMENDED STOCKS", style="Header.TLabel").pack(side=tk.LEFT)
+        self.rec_refresh_btn = ttk.Button(header, text="🔄 Re-run Backtest", command=self._refresh_recommendations)
+        self.rec_refresh_btn.pack(side=tk.RIGHT)
+        self.rec_status_label = ttk.Label(header, text="", style="Subheader.TLabel")
+        self.rec_status_label.pack(side=tk.RIGHT, padx=12)
+
+        ttk.Label(
+            f, style="Subheader.TLabel",
+            text="Recommendation Points (0-100): 100 = best deal in market history, 0 = guaranteed to tank. "
+                 "Backtested & refreshed automatically every launch.",
+        ).pack(fill=tk.X, pady=(0, 10))
+
+        self.rec_progress = ttk.Progressbar(f, orient=tk.HORIZONTAL, length=100, mode='determinate')
+        self.rec_progress.pack(fill=tk.X, pady=(0, 12))
+
+        table_f = tk.Frame(f, bg="#16213e")
+        table_f.pack(fill=tk.BOTH, expand=True)
+
+        cols = ("rank", "ticker", "score", "price", "change", "momentum", "rsi", "vol", "bt", "drivers")
+        headers = ["#", "Ticker", "Rec. Points", "Price", "Day", "12-1 Mom %",
+                   "RSI", "Volatility %", "Backtest %", "Top Drivers"]
+        widths = [40, 70, 110, 90, 70, 90, 60, 90, 90, 200]
+        self.rec_tree = ttk.Treeview(table_f, columns=cols, show="headings")
+        for c, h, w in zip(cols, headers, widths):
+            self.rec_tree.heading(c, text=h)
+            self.rec_tree.column(c, width=w, anchor="center")
+        self.rec_tree.column("drivers", anchor="w")
+
+        # Color rows by score band
+        self.rec_tree.tag_configure("elite", foreground="#4ecca3")    # 80+
+        self.rec_tree.tag_configure("strong", foreground="#9be8c4")   # 65-80
+        self.rec_tree.tag_configure("fair", foreground="#e0e0e0")     # 50-65
+        self.rec_tree.tag_configure("weak", foreground="#e9a445")     # 35-50
+        self.rec_tree.tag_configure("avoid", foreground="#e94560")    # <35
+
+        sb = ttk.Scrollbar(table_f, orient=tk.VERTICAL, command=self.rec_tree.yview)
+        self.rec_tree.configure(yscroll=sb.set)
+        self.rec_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.rec_tree.bind("<Double-1>", self._on_rec_select)
+
+    def _on_rec_select(self, event):
+        sel = self.rec_tree.selection()
+        if not sel:
+            return
+        ticker = self.rec_tree.item(sel[0], "values")[1]
+        self.search_combo.var.set(ticker)
+        self.notebook.select(self.chart_tab)
+        self._update_charts()
+
+    @staticmethod
+    def _rec_tag(score):
+        if score >= 80: return "elite"
+        if score >= 65: return "strong"
+        if score >= 50: return "fair"
+        if score >= 35: return "weak"
+        return "avoid"
+
+    def _refresh_recommendations(self):
+        if self._rec_loading:
+            return
+        self._rec_loading = True
+        self.rec_refresh_btn.config(state="disabled")
+        self.rec_status_label.config(text="Backtesting market…")
+        self.rec_progress.configure(value=0)
+        self.log_msg("Recommendations: backtesting universe for top 10 picks…")
+
+        universe = recommendation_engine.DEFAULT_UNIVERSE
+        cache_dir = os.path.join(os.path.dirname(__file__), "cache")
+
+        def progress(msg):
+            self.log_msg(msg)
+            # Parse "(i/total)" to advance the progress bar
+            try:
+                frac = msg.split("(")[1].split(")")[0]
+                i, total = frac.split("/")
+                self.root.after(0, lambda v=int(int(i) / int(total) * 100): self.rec_progress.configure(value=v))
+            except Exception:
+                pass
+
+        def worker():
+            try:
+                top = recommendation_engine.rank_recommendations(
+                    universe=universe, top_n=10, period="2y",
+                    cache_dir=cache_dir, log=progress)
+                self.root.after(0, lambda: self._fill_rec_table(top))
+                self.log_msg(f"Recommendations: top {len(top)} picks ready.")
+            except Exception as e:
+                self.log_msg(f"Recommendations ERROR: {e}")
+            finally:
+                self.root.after(0, self._rec_done)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _rec_done(self):
+        self._rec_loading = False
+        self.rec_refresh_btn.config(state="normal")
+        self.rec_progress.configure(value=100)
+        self.rec_status_label.config(text=f"Updated {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    def _fill_rec_table(self, data):
+        for i in self.rec_tree.get_children():
+            self.rec_tree.delete(i)
+        for idx, r in enumerate(data, 1):
+            self.rec_tree.insert(
+                "", "end",
+                values=(idx, r["ticker"], f"{r['score']:.1f}", f"${r['price']:.2f}",
+                        f"{r['daily_change']:+.2f}%", f"{r['momentum_12_1']:+.1f}",
+                        f"{r['rsi']:.0f}", f"{r['annual_vol']:.0f}",
+                        f"{r['strategy_return']:+.1f}", r["drivers"]),
+                tags=(self._rec_tag(r["score"]),))
 
     def _build_chart_tab(self, parent):
         main = tk.Frame(parent, bg="#1a1a2e")
