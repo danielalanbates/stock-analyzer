@@ -40,6 +40,7 @@ python portfolio_manager.py rebalance
 
 ## Features
 
+- **Current Most Recommended Stocks**: on every launch the app backtests a universe of large caps and ranks the top 10 by a transparent **Recommendation Points** score (0-100, where 100 = the best deal imaginable and 0 = guaranteed to tank). The score blends 12-1 momentum, trend structure, a walk-forward SMA backtest, RSI/entry quality, MACD, and risk (volatility + drawdown). See `recommendation_engine.py`.
 - **Technical Analysis**: RSI, MACD, Moving Averages, Volatility
 - **Signal Detection**: Golden/Death Cross, Overbought/Oversold, MACD crossovers
 - **Smart Rebalancing**: Considers both allocation deviation AND market signals
