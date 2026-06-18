@@ -1,0 +1,21 @@
+# Live portfolio state (use portfolio.example.json as a template)
+portfolio.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PyInstaller build output
+build/
+dist/
+
+# Cached market data
+cache/
+
+# Trade logs
+trade_log_*.json
+
+# macOS
+.DS_Store

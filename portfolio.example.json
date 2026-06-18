@@ -1,0 +1,23 @@
+{
+  "holdings": {
+    "AAPL": {
+      "shares": 50.0,
+      "avg_cost": 175.5,
+      "added": "2026-04-06T14:43:48.498140"
+    },
+    "MSFT": {
+      "shares": 30.0,
+      "avg_cost": 380.0,
+      "added": "2026-04-06T14:43:49.143445"
+    }
+  },
+  "cash": 10000.0,
+  "target_allocation": {
+    "AAPL": 0.3,
+    "MSFT": 0.3,
+    "CASH": 0.4
+  },
+  "risk_tolerance": 0.6,
+  "rebalance_threshold": 0.05,
+  "last_updated": "2026-04-06T14:43:50.440626"
+}
