@@ -4,10 +4,54 @@ import SwiftUI
 struct StockAnalyzerMacApp: App {
     var body: some Scene {
         WindowGroup("BatesAI — Stock Analyzer") {
-            RecommendationsView()
-                .frame(minWidth: 920, minHeight: 600)
+            RootView()
+                .frame(minWidth: 980, minHeight: 640)
         }
         .windowStyle(.titleBar)
+    }
+}
+
+enum Section: String, CaseIterable, Identifiable {
+    case recommendations = "Top Recommendations"
+    case chart = "Chart Analyzer"
+    case screener = "Momentum Screener"
+    var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .recommendations: return "star.fill"
+        case .chart: return "chart.xyaxis.line"
+        case .screener: return "list.number"
+        }
+    }
+}
+
+struct RootView: View {
+    @State private var section: Section? = .recommendations
+    @State private var chartTicker: String?
+
+    var body: some View {
+        NavigationSplitView {
+            List(Section.allCases, selection: $section) { s in
+                Label(s.rawValue, systemImage: s.symbol).tag(s)
+            }
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210)
+        } detail: {
+            switch section ?? .recommendations {
+            case .recommendations:
+                RecommendationsView { ticker in
+                    chartTicker = ticker
+                    section = .chart
+                }
+            case .chart:
+                ChartView(initialTicker: chartTicker)
+                    .id(chartTicker ?? "default")
+            case .screener:
+                ScreenerView { ticker in
+                    chartTicker = ticker
+                    section = .chart
+                }
+            }
+        }
     }
 }
 
@@ -39,6 +83,7 @@ final class RecommendationsModel: ObservableObject {
 
 struct RecommendationsView: View {
     @StateObject private var model = RecommendationsModel()
+    var onPick: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,6 +166,15 @@ struct RecommendationsView: View {
             TableColumn("Top Drivers") { r in
                 Text(r.drivers).foregroundStyle(.secondary)
             }
+            TableColumn("") { r in
+                Button {
+                    onPick?(r.ticker)
+                } label: {
+                    Image(systemName: "chart.xyaxis.line")
+                }
+                .buttonStyle(.borderless)
+                .help("Open \(r.ticker) in the chart")
+            }.width(36)
         }
         .scrollContentBackground(.hidden)
     }

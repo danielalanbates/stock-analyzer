@@ -29,30 +29,59 @@ final class RecommendationEngine {
         ProcessInfo.processInfo.environment["STOCKANALYZER_ENGINE"] ?? Self.defaultEngineDir
     }
 
-    /// Runs `recommendation_engine.py --fast --json` and decodes the result.
-    func fetch(count: Int = 10, fast: Bool = true) async throws -> [Recommendation] {
+    /// Runs a Python script in the engine dir and returns raw stdout JSON.
+    private func runJSON(script: String, _ extra: [String]) async throws -> Data {
         let dir = engineDir()
-        let cache = "\(dir)/cache"
-        var args = ["recommendation_engine.py", "-n", "\(count)", "--json", "--cache", cache]
-        if fast { args.append("--fast") }
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: python())
-        proc.arguments = args
-        proc.currentDirectoryURL = URL(fileURLWithPath: dir)
-        let out = Pipe()
-        proc.standardOutput = out
-        proc.standardError = Pipe()  // discard progress noise
-
-        try proc.run()
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        proc.waitUntilExit()
-
-        guard proc.terminationStatus == 0 else {
-            throw NSError(domain: "StockAnalyzer", code: Int(proc.terminationStatus),
-                          userInfo: [NSLocalizedDescriptionKey:
-                            "Engine exited with status \(proc.terminationStatus)"])
+        let py = python()
+        return try await withCheckedThrowingContinuation { cont in
+            DispatchQueue.global().async {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: py)
+                proc.arguments = [script] + extra
+                proc.currentDirectoryURL = URL(fileURLWithPath: dir)
+                let out = Pipe()
+                proc.standardOutput = out
+                proc.standardError = Pipe()  // discard progress noise
+                do {
+                    try proc.run()
+                    let data = out.fileHandleForReading.readDataToEndOfFile()
+                    proc.waitUntilExit()
+                    if proc.terminationStatus != 0 {
+                        cont.resume(throwing: NSError(
+                            domain: "StockAnalyzer", code: Int(proc.terminationStatus),
+                            userInfo: [NSLocalizedDescriptionKey:
+                                "\(script) exited with status \(proc.terminationStatus)"]))
+                    } else {
+                        cont.resume(returning: data)
+                    }
+                } catch {
+                    cont.resume(throwing: error)
+                }
+            }
         }
+    }
+
+    /// Runs `recommendation_engine.py --json` and decodes the result.
+    func fetch(count: Int = 10, fast: Bool = true) async throws -> [Recommendation] {
+        let cache = "\(engineDir())/cache"
+        var args = ["-n", "\(count)", "--json", "--cache", cache]
+        if fast { args.append("--fast") }
+        let data = try await runJSON(script: "recommendation_engine.py", args)
         return try JSONDecoder().decode([Recommendation].self, from: data)
+    }
+
+    /// Runs `data_cli.py history TICKER --period P`.
+    func history(_ ticker: String, period: String = "1y") async throws -> PriceHistory {
+        let data = try await runJSON(script: "data_cli.py",
+                                     ["history", ticker, "--period", period])
+        return try JSONDecoder().decode(PriceHistory.self, from: data)
+    }
+
+    /// Runs `data_cli.py screen --fast -n N`.
+    func screen(fast: Bool = true, count: Int = 40) async throws -> [ScreenRow] {
+        var args = ["screen", "-n", "\(count)"]
+        if fast { args.append("--fast") }
+        let data = try await runJSON(script: "data_cli.py", args)
+        return try JSONDecoder().decode([ScreenRow].self, from: data)
     }
 }
