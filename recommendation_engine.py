@@ -25,6 +25,7 @@ Everything is local-first: data via yfinance, cached on disk for an hour.
 
 from __future__ import annotations
 
+import gc
 import math
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,24 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+try:
+    import fundamentals as _fundamentals
+except Exception:  # pragma: no cover - fundamentals layer is optional
+    _fundamentals = None
+
+# How much the blended score weighs technicals vs. fundamentals.
+TECH_WEIGHT = 0.65
+FUND_WEIGHT = 0.35
+
+# Leaner universe used for the automatic on-launch refresh so it stays within
+# memory on 8GB machines. The full universe is available for manual "Full" runs.
+FAST_UNIVERSE = [
+    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "AVGO", "TSLA", "LLY", "JPM",
+    "V", "MA", "COST", "HD", "MRK", "ABBV", "CRM", "NFLX", "AMD", "ADBE",
+    "ORCL", "ACN", "MU", "QCOM", "AMAT", "LRCX", "ADI", "PANW", "KLAC", "ISRG",
+    "CAT", "GE", "UNH", "XOM", "WMT", "SPY", "QQQ", "SMH",
+]
 
 # Default universe: S&P 100-ish large caps + a few popular ETFs.
 DEFAULT_UNIVERSE = [
@@ -187,8 +206,14 @@ def score_ticker(ticker: str, df: pd.DataFrame) -> dict | None:
 
 
 def rank_recommendations(universe=None, top_n=10, period="2y",
-                         cache_dir=None, log=lambda m: None):
-    """Score every ticker in `universe`, return the top `top_n` by score.
+                         cache_dir=None, log=lambda m: None,
+                         use_fundamentals=True, shortlist=25):
+    """Rank `universe` and return the top `top_n` blended recommendations.
+
+    Two-stage to keep launch fast:
+      1. Compute the technical score for every ticker.
+      2. Pull fundamentals only for the top `shortlist` technical names and blend
+         (TECH_WEIGHT * technical + FUND_WEIGHT * fundamentals*100), then re-rank.
 
     `log` is an optional callback for progress messages.
     """
@@ -197,6 +222,7 @@ def rank_recommendations(universe=None, top_n=10, period="2y",
     if cache_path:
         cache_path.mkdir(exist_ok=True)
 
+    # --- Stage 1: technical score for everything ---
     results = []
     total = len(universe)
     for i, t in enumerate(universe):
@@ -217,11 +243,43 @@ def rank_recommendations(universe=None, top_n=10, period="2y",
                     df.to_csv(cfile)
             scored = score_ticker(t, df)
             if scored:
+                scored["technical_score"] = scored["score"]
                 results.append(scored)
         except Exception as e:  # noqa: BLE001 - never let one ticker kill the run
             log(f"  skip {t}: {e}")
+        finally:
+            # Memory hygiene: release the DataFrame promptly (8GB-friendly).
+            df = None
+            if i % 15 == 0:
+                gc.collect()
 
-    results.sort(key=lambda r: r["score"], reverse=True)
+    results.sort(key=lambda r: r["technical_score"], reverse=True)
+
+    # --- Stage 2: blend fundamentals into the shortlist ---
+    if use_fundamentals and _fundamentals is not None:
+        cdir = str(cache_path) if cache_path else None
+        for j, r in enumerate(results[:shortlist]):
+            log(f"Fundamentals {r['ticker']} ({j + 1}/{min(shortlist, len(results))})...")
+            try:
+                fs = _fundamentals.fundamentals_score(r["ticker"], cache_dir=cdir)
+                r["fundamental_score"] = round(fs["score"] * 100, 1)
+                r["pe"] = fs["pe"]
+                r["roe"] = fs["roe"]
+                r["rev_growth"] = fs["rev_growth"]
+                r["target_upside"] = fs["target_upside"]
+                r["sector"] = fs["sector"]
+                r["score"] = round(
+                    TECH_WEIGHT * r["technical_score"] + FUND_WEIGHT * r["fundamental_score"], 1)
+                # surface the strongest of the two for the drivers blurb
+                if r["fundamental_score"] > r["technical_score"]:
+                    r["drivers"] = f"Fundamentals, {r['drivers'].split(',')[0]}"
+            except Exception as e:  # noqa: BLE001
+                log(f"  no fundamentals for {r['ticker']}: {e}")
+                r["fundamental_score"] = None
+        # only the fundamentally-vetted shortlist competes for the top slots
+        ranked = sorted(results[:shortlist], key=lambda r: r["score"], reverse=True)
+        return ranked[:top_n]
+
     return results[:top_n]
 
 

@@ -212,10 +212,11 @@ class StockAnalyzerGUI:
         table_f = tk.Frame(f, bg="#16213e")
         table_f.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("rank", "ticker", "score", "price", "change", "momentum", "rsi", "vol", "bt", "drivers")
-        headers = ["#", "Ticker", "Rec. Points", "Price", "Day", "12-1 Mom %",
-                   "RSI", "Volatility %", "Backtest %", "Top Drivers"]
-        widths = [40, 70, 110, 90, 70, 90, 60, 90, 90, 200]
+        cols = ("rank", "ticker", "score", "tech", "fund", "price", "change",
+                "momentum", "pe", "upside", "drivers")
+        headers = ["#", "Ticker", "Rec. Points", "Tech", "Fund.", "Price", "Day",
+                   "12-1 Mom %", "P/E", "Tgt Upside %", "Top Drivers"]
+        widths = [36, 64, 100, 60, 60, 84, 64, 86, 64, 96, 180]
         self.rec_tree = ttk.Treeview(table_f, columns=cols, show="headings")
         for c, h, w in zip(cols, headers, widths):
             self.rec_tree.heading(c, text=h)
@@ -261,7 +262,8 @@ class StockAnalyzerGUI:
         self.rec_progress.configure(value=0)
         self.log_msg("Recommendations: backtesting universe for top 10 picks…")
 
-        universe = recommendation_engine.DEFAULT_UNIVERSE
+        # Lean universe on the automatic launch refresh (8GB-friendly).
+        universe = recommendation_engine.FAST_UNIVERSE
         cache_dir = os.path.join(os.path.dirname(__file__), "cache")
 
         def progress(msg):
@@ -297,12 +299,19 @@ class StockAnalyzerGUI:
         for i in self.rec_tree.get_children():
             self.rec_tree.delete(i)
         for idx, r in enumerate(data, 1):
+            fund = r.get("fundamental_score")
+            pe = r.get("pe")
+            upside = r.get("target_upside")
             self.rec_tree.insert(
                 "", "end",
-                values=(idx, r["ticker"], f"{r['score']:.1f}", f"${r['price']:.2f}",
-                        f"{r['daily_change']:+.2f}%", f"{r['momentum_12_1']:+.1f}",
-                        f"{r['rsi']:.0f}", f"{r['annual_vol']:.0f}",
-                        f"{r['strategy_return']:+.1f}", r["drivers"]),
+                values=(idx, r["ticker"], f"{r['score']:.1f}",
+                        f"{r.get('technical_score', r['score']):.0f}",
+                        f"{fund:.0f}" if fund is not None else "—",
+                        f"${r['price']:.2f}", f"{r['daily_change']:+.2f}%",
+                        f"{r['momentum_12_1']:+.1f}",
+                        f"{pe:.1f}" if pe else "—",
+                        f"{upside:+.0f}" if upside is not None else "—",
+                        r["drivers"]),
                 tags=(self._rec_tag(r["score"]),))
 
     def _build_chart_tab(self, parent):
