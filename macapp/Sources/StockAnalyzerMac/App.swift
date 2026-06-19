@@ -2,10 +2,13 @@ import SwiftUI
 
 @main
 struct StockAnalyzerMacApp: App {
+    @StateObject private var store = Store()
     var body: some Scene {
         WindowGroup("BatesAI — Stock Analyzer") {
             RootView()
                 .frame(minWidth: 980, minHeight: 640)
+                .environmentObject(store)
+                .onAppear { store.load() }
         }
         .windowStyle(.titleBar)
     }
@@ -15,6 +18,8 @@ enum Section: String, CaseIterable, Identifiable {
     case recommendations = "Top Recommendations"
     case chart = "Chart Analyzer"
     case screener = "Momentum Screener"
+    case watchlist = "Watchlist"
+    case alerts = "Price Alerts"
     case portfolio = "Portfolio"
     var id: String { rawValue }
     var symbol: String {
@@ -22,6 +27,8 @@ enum Section: String, CaseIterable, Identifiable {
         case .recommendations: return "star.fill"
         case .chart: return "chart.xyaxis.line"
         case .screener: return "list.number"
+        case .watchlist: return "eye.fill"
+        case .alerts: return "bell.fill"
         case .portfolio: return "briefcase.fill"
         }
     }
@@ -52,6 +59,13 @@ struct RootView: View {
                     chartTicker = ticker
                     section = .chart
                 }
+            case .watchlist:
+                WatchlistView { ticker in
+                    chartTicker = ticker
+                    section = .chart
+                }
+            case .alerts:
+                AlertsView()
             case .portfolio:
                 PortfolioView { ticker in
                     chartTicker = ticker
