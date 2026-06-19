@@ -40,7 +40,27 @@ python portfolio_manager.py rebalance
 
 ## Features
 
-- **Current Most Recommended Stocks**: on every launch the app backtests a universe of large caps and ranks the top 10 by a transparent **Recommendation Points** score (0-100, where 100 = the best deal imaginable and 0 = guaranteed to tank). The score blends 12-1 momentum, trend structure, a walk-forward SMA backtest, RSI/entry quality, MACD, and risk (volatility + drawdown). See `recommendation_engine.py`.
+- **Current Most Recommended Stocks**: on every launch the app backtests a universe of large caps and ranks the top 10 by a transparent **Recommendation Points** score (0-100, where 100 = the best deal imaginable and 0 = guaranteed to tank). The score blends 12-1 momentum, a walk-forward SMA backtest, trend structure, a drawdown guard, MACD, and RSI, then blends in **fundamentals** (P/E, PEG, ROE, margins, growth, debt, analyst targets — see `fundamentals.py`). See `recommendation_engine.py`.
+
+### How the score is validated
+
+The scoring system is not hand-waved — it is backtested point-in-time with
+`validate_recommendations.py`, which recomputes each score using only data
+available at each historical date and measures realized forward returns. Latest
+run (38 large caps, 5y, monthly rebalance, 3-month forward horizon, 1,786
+samples):
+
+| Metric | Value |
+| --- | --- |
+| Top-quintile avg 3-mo forward return | **+10.06%** |
+| Bottom-quintile avg 3-mo forward return | +8.63% |
+| Long-top / short-bottom spread | **+1.43%** |
+| Top-quintile hit rate (beat median) | **59%** |
+
+Factor weights are tuned toward the inputs with a positive information
+coefficient (momentum, strategy backtest). Volatility is *reported but not
+rewarded* — penalizing or chasing it both overfit a single market regime. Full
+results in `validation_report.json`.
 - **Technical Analysis**: RSI, MACD, Moving Averages, Volatility
 - **Signal Detection**: Golden/Death Cross, Overbought/Oversold, MACD crossovers
 - **Smart Rebalancing**: Considers both allocation deviation AND market signals

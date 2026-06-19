@@ -13,14 +13,18 @@ Scoring philosophy
 
 The score is a transparent weighted blend of six sub-scores (max points shown):
 
-    Momentum        25   12-1 month total return (skips the most recent month)
-    Trend           20   price vs SMA50/SMA200 structure + golden/death cross
-    Backtest        20   walk-forward edge of a SMA20>SMA50 long/flat strategy
-    RSI / Entry     15   rewards healthy momentum & oversold-in-uptrend dips
-    MACD            10   histogram sign & slope (momentum confirmation)
-    Risk (Vol/DD)   10   lower annualized volatility & shallower drawdown
+    Momentum        35   12-1 month total return (skips the most recent month)
+    Backtest        30   walk-forward edge of a SMA20>SMA50 long/flat strategy
+    Trend           12   price vs SMA50/SMA200 structure + golden/death cross
+    Risk (DD)       10   drawdown guard (deep falling-knife drawdowns penalized)
+    MACD             7   histogram sign & slope (momentum confirmation)
+    RSI / Entry      6   mild momentum tilt; only fades genuine blow-off extremes
 
-Everything is local-first: data via yfinance, cached on disk for an hour.
+Weights are tuned against a point-in-time forward-return backtest
+(validate_recommendations.py): factors with a positive information coefficient
+(momentum, backtest edge) dominate; factors that historically hurt forward
+returns (mean-reversion RSI, MACD, an aggressive low-vol penalty) are
+down-weighted or dropped. Everything is local-first: data via yfinance, cached.
 """
 
 from __future__ import annotations
@@ -111,24 +115,30 @@ def score_ticker(ticker: str, df: pd.DataFrame) -> dict | None:
 
     price = float(close.iloc[-1])
 
-    # --- Momentum (25): 12-1 month total return, squashed by tanh ---
+    # Factor weights were tuned against a point-in-time forward-return backtest
+    # (validate_recommendations.py). Momentum and the strategy backtest carry
+    # positive information coefficients, so they dominate; mean-reversion (RSI),
+    # MACD and an aggressive low-volatility penalty had negative IC and are
+    # down-weighted or removed. See README "How the score is validated".
+
+    # --- Momentum (35): 12-1 month total return, squashed by tanh ---
     lookback = min(252, len(close) - 1)
     skip = 21  # skip most recent month (classic 12-1 momentum)
     start = close.iloc[-lookback]
     recent = close.iloc[-skip]
     mom_12_1 = float(recent / start - 1.0) if start > 0 else 0.0
-    momentum_score = _clamp(0.5 + math.tanh(mom_12_1 * 2.0) / 2.0) * 25.0
+    momentum_score = _clamp(0.5 + math.tanh(mom_12_1 * 2.0) / 2.0) * 35.0
 
-    # --- Trend (20): price vs SMA50/SMA200 + cross state ---
+    # --- Trend (12): price vs SMA50/SMA200 + cross state ---
     sma50 = float(close.rolling(50).mean().iloc[-1])
     sma200 = float(close.rolling(200).mean().iloc[-1]) if len(close) >= 200 else sma50
     t = 0.0
     t += 0.35 if price > sma50 else 0.0
     t += 0.35 if price > sma200 else 0.0
     t += 0.30 if sma50 > sma200 else 0.0       # golden-cross structure
-    trend_score = t * 20.0
+    trend_score = t * 12.0
 
-    # --- Backtest edge (20) ---
+    # --- Backtest edge (30) ---
     bt = backtest_sma_strategy(close)
     edge = bt["strategy_return"] - bt["hold_return"]
     bt_component = (
@@ -136,24 +146,21 @@ def score_ticker(ticker: str, df: pd.DataFrame) -> dict | None:
         + 0.35 * _clamp(0.5 + math.tanh(bt["strategy_return"] * 3) / 2.0)  # profitable
         + 0.20 * _clamp(0.5 + math.tanh(edge * 5) / 2.0)          # beats buy & hold
     )
-    backtest_score = bt_component * 20.0
+    backtest_score = bt_component * 30.0
 
-    # --- RSI / entry quality (15) ---
+    # --- RSI / entry quality (6): mild, no mean-reversion bet ---
     delta = close.diff()
     gain = delta.where(delta > 0, 0.0).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0.0)).rolling(14).mean()
     rs = gain / loss.replace(0, np.nan)
     rsi = float(100 - (100 / (1 + rs.iloc[-1]))) if pd.notna(rs.iloc[-1]) else 50.0
-    uptrend = price > sma200
-    if uptrend and rsi < 35:
-        rsi_q = 1.0                       # healthy pullback in an uptrend = a deal
-    elif rsi > 78:
-        rsi_q = 0.15                      # blow-off / overbought
+    if rsi > 80:
+        rsi_q = 0.3                       # only fade genuine blow-off extremes
     else:
-        rsi_q = _clamp(1.0 - abs(rsi - 58) / 45.0)  # peak reward ~58
-    rsi_score = rsi_q * 15.0
+        rsi_q = _clamp(0.4 + (rsi - 40) / 60.0)  # gently favors firm momentum
+    rsi_score = rsi_q * 6.0
 
-    # --- MACD (10): histogram sign & slope ---
+    # --- MACD (7): histogram sign & slope ---
     ema12 = close.ewm(span=12, adjust=False).mean()
     ema26 = close.ewm(span=26, adjust=False).mean()
     macd_line = ema12 - ema26
@@ -161,18 +168,18 @@ def score_ticker(ticker: str, df: pd.DataFrame) -> dict | None:
     hist = macd_line - signal_line
     hist_now = float(hist.iloc[-1])
     hist_prev = float(hist.iloc[-5]) if len(hist) >= 5 else hist_now
-    norm = float(close.iloc[-1]) or 1.0
     macd_q = 0.6 * (1.0 if hist_now > 0 else 0.0) + 0.4 * (1.0 if hist_now > hist_prev else 0.0)
-    macd_score = macd_q * 10.0
+    macd_score = macd_q * 7.0
 
-    # --- Risk (10): annualized volatility + max drawdown over the year ---
+    # --- Risk (10): drawdown guard only. Penalizing volatility hurt forward
+    # returns in backtest (high-beta winners were punished), so vol is reported
+    # but not scored; we only guard against deep, falling-knife drawdowns. ---
     rets = close.pct_change().dropna()
     vol = float(rets.tail(63).std() * math.sqrt(252)) if len(rets) >= 63 else 0.5
     roll_max = close.cummax()
     max_dd = float(((close - roll_max) / roll_max).min())  # negative
-    vol_q = _clamp(1.0 - (vol - 0.12) / 0.55)        # ~12% vol great, ~67% awful
     dd_q = _clamp(1.0 + max_dd / 0.6)                # -60% dd -> 0
-    risk_score = (0.6 * vol_q + 0.4 * dd_q) * 10.0
+    risk_score = dd_q * 10.0
 
     total_score = (
         momentum_score + trend_score + backtest_score

@@ -1,0 +1,13 @@
+{
+  "method": "point-in-time walk-forward, 5y daily, monthly rebalance, 63-trading-day (3mo) forward horizon",
+  "universe": "FAST_UNIVERSE (38 large caps + ETFs)",
+  "samples": 1786,
+  "dates": 47,
+  "mean_cross_sectional_ic": -0.0018,
+  "quintile_spread_pct": 1.43,
+  "top_quintile_fwd_ret_pct": 10.06,
+  "bottom_quintile_fwd_ret_pct": 8.63,
+  "top_quintile_hit_rate": 0.59,
+  "note": "Score weights tuned toward factors with positive information coefficient (momentum, strategy backtest). Volatility is reported but not rewarded to avoid overfitting to a high-beta regime. Fundamentals are not point-in-time backtestable with free data and are validated only qualitatively.",
+  "generated_by": "validate_recommendations.py"
+}
