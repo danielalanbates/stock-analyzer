@@ -372,6 +372,11 @@ def main():
     # Rebalance
     subparsers.add_parser("rebalance", help="Show rebalance recommendations")
 
+    # Recommend (headless top picks — works without the GUI)
+    rec = subparsers.add_parser("recommend", help="Top stock picks by Recommendation Points")
+    rec.add_argument("-n", type=int, default=10, help="How many picks to show")
+    rec.add_argument("--full", action="store_true", help="Score the full universe (slower)")
+
     args = parser.parse_args()
     pm = PortfolioManager(args.portfolio)
 
@@ -399,6 +404,21 @@ def main():
     elif args.command == "rebalance":
         recs = pm.generate_rebalance_recommendations()
         print(json.dumps(recs, indent=2))
+    elif args.command == "recommend":
+        import recommendation_engine as re_eng
+        cache = str(Path(args.portfolio).parent / "cache")
+        universe = re_eng.DEFAULT_UNIVERSE if args.full else re_eng.FAST_UNIVERSE
+        print(f"Backtesting {len(universe)} tickers for top {args.n} picks…")
+        top = re_eng.rank_recommendations(universe=universe, top_n=args.n,
+                                          cache_dir=cache, log=lambda m: None)
+        print(f"\n{'#':<3}{'Ticker':<8}{'Points':<8}{'Tech':<6}{'Fund':<6}"
+              f"{'Price':<11}{'P/E':<7}{'Drivers'}")
+        for i, r in enumerate(top, 1):
+            fund = r.get("fundamental_score")
+            pe = r.get("pe")
+            print(f"{i:<3}{r['ticker']:<8}{r['score']:<8}{r.get('technical_score',0):<6.0f}"
+                  f"{(f'{fund:.0f}' if fund is not None else '—'):<6}"
+                  f"${r['price']:<10.2f}{(f'{pe:.1f}' if pe else '—'):<7}{r['drivers']}")
     else:
         parser.print_help()
 

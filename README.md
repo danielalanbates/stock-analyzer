@@ -36,6 +36,10 @@ python portfolio_manager.py value
 
 # Get rebalance recommendations
 python portfolio_manager.py rebalance
+
+# Top stock picks by Recommendation Points (headless, no GUI needed)
+python portfolio_manager.py recommend -n 10
+python portfolio_manager.py recommend --full      # score the full universe
 ```
 
 ## Features
