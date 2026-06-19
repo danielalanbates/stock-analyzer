@@ -44,6 +44,19 @@ def history(ticker: str, period: str = "1y") -> dict:
     sma200 = close.rolling(200).mean()
     rsi = _rsi(close)
 
+    # Bollinger Bands (20, 2σ)
+    bb_mid = close.rolling(20).mean()
+    bb_std = close.rolling(20).std()
+    bb_up = bb_mid + 2 * bb_std
+    bb_lo = bb_mid - 2 * bb_std
+
+    # MACD (12/26/9)
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    macd_sig = macd.ewm(span=9, adjust=False).mean()
+    macd_hist = macd - macd_sig
+
     bars = []
     for i, (idx, row) in enumerate(df.iterrows()):
         def g(series):
@@ -55,8 +68,30 @@ def history(ticker: str, period: str = "1y") -> dict:
             "low": g(df["Low"]), "close": g(close),
             "volume": int(row["Volume"]) if not pd.isna(row["Volume"]) else 0,
             "sma50": g(sma50), "sma200": g(sma200), "rsi": g(rsi),
+            "ema12": g(ema12), "ema26": g(ema26),
+            "bbUpper": g(bb_up), "bbLower": g(bb_lo), "bbMid": g(bb_mid),
+            "macd": g(macd), "macdSignal": g(macd_sig), "macdHist": g(macd_hist),
         })
     return {"ticker": ticker, "period": period, "bars": bars}
+
+
+def quotes(tickers: list) -> dict:
+    """Latest price + daily change for a set of tickers (for the portfolio view)."""
+    out = {}
+    for t in tickers:
+        try:
+            df = yf.download(t, period="5d", interval="1d",
+                             progress=False, timeout=12, auto_adjust=True)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            c = df["Close"].dropna()
+            if len(c) >= 1:
+                price = float(c.iloc[-1])
+                chg = float(c.iloc[-1] / c.iloc[-2] - 1) * 100 if len(c) >= 2 else 0.0
+                out[t] = {"price": round(price, 2), "change": round(chg, 2)}
+        except Exception:
+            continue
+    return out
 
 
 def screen(fast: bool, n: int) -> list:
@@ -90,12 +125,16 @@ def main():
     s = sub.add_parser("screen")
     s.add_argument("--fast", action="store_true")
     s.add_argument("-n", type=int, default=50)
+    q = sub.add_parser("quotes")
+    q.add_argument("tickers", nargs="+")
     args = p.parse_args()
 
     if args.cmd == "history":
         print(json.dumps(history(args.ticker.upper(), args.period)))
     elif args.cmd == "screen":
         print(json.dumps(screen(args.fast, args.n)))
+    elif args.cmd == "quotes":
+        print(json.dumps(quotes([t.upper() for t in args.tickers])))
     else:
         p.print_help(sys.stderr)
         sys.exit(1)

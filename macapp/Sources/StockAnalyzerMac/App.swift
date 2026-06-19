@@ -15,12 +15,14 @@ enum Section: String, CaseIterable, Identifiable {
     case recommendations = "Top Recommendations"
     case chart = "Chart Analyzer"
     case screener = "Momentum Screener"
+    case portfolio = "Portfolio"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .recommendations: return "star.fill"
         case .chart: return "chart.xyaxis.line"
         case .screener: return "list.number"
+        case .portfolio: return "briefcase.fill"
         }
     }
 }
@@ -47,6 +49,11 @@ struct RootView: View {
                     .id(chartTicker ?? "default")
             case .screener:
                 ScreenerView { ticker in
+                    chartTicker = ticker
+                    section = .chart
+                }
+            case .portfolio:
+                PortfolioView { ticker in
                     chartTicker = ticker
                     section = .chart
                 }

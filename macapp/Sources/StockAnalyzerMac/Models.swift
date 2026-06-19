@@ -37,6 +37,16 @@ struct PriceBar: Identifiable, Decodable {
     let sma50: Double?
     let sma200: Double?
     let rsi: Double?
+    let ema12: Double?
+    let ema26: Double?
+    let bbUpper: Double?
+    let bbLower: Double?
+    let bbMid: Double?
+    let macd: Double?
+    let macdSignal: Double?
+    let macdHist: Double?
+
+    var isUp: Bool { (close ?? 0) >= (open ?? 0) }
 
     var day: Date {
         ISO8601DateFormatter.justDate.date(from: date) ?? Date()
@@ -65,6 +75,35 @@ extension ISO8601DateFormatter {
         f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
+}
+
+// MARK: - Portfolio
+
+struct Quote: Decodable { let price: Double; let change: Double }
+
+struct PortfolioHolding: Decodable {
+    let shares: Double
+    let avgCost: Double
+    enum CodingKeys: String, CodingKey { case shares; case avgCost = "avg_cost" }
+}
+
+struct PortfolioFile: Decodable {
+    let holdings: [String: PortfolioHolding]
+    let cash: Double?
+}
+
+/// A holding joined with its live quote, for display.
+struct PortfolioRow: Identifiable {
+    var id: String { ticker }
+    let ticker: String
+    let shares: Double
+    let avgCost: Double
+    let price: Double
+    let dayChange: Double
+    var value: Double { shares * price }
+    var costBasis: Double { shares * avgCost }
+    var pnl: Double { value - costBasis }
+    var pnlPct: Double { costBasis > 0 ? (value / costBasis - 1) * 100 : 0 }
 }
 
 enum ScoreBand {

@@ -84,4 +84,32 @@ final class RecommendationEngine {
         let data = try await runJSON(script: "data_cli.py", args)
         return try JSONDecoder().decode([ScreenRow].self, from: data)
     }
+
+    /// Reads the local portfolio.json (no brokerage needed).
+    func portfolioFile() throws -> PortfolioFile {
+        let url = URL(fileURLWithPath: "\(engineDir())/portfolio.json")
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(PortfolioFile.self, from: data)
+    }
+
+    /// Runs `data_cli.py quotes T1 T2 …`.
+    func quotes(_ tickers: [String]) async throws -> [String: Quote] {
+        guard !tickers.isEmpty else { return [:] }
+        let data = try await runJSON(script: "data_cli.py", ["quotes"] + tickers)
+        return try JSONDecoder().decode([String: Quote].self, from: data)
+    }
+
+    /// Joins local holdings with live quotes into displayable rows.
+    func portfolio() async throws -> (rows: [PortfolioRow], cash: Double) {
+        let file = try portfolioFile()
+        let tickers = Array(file.holdings.keys)
+        let q = try await quotes(tickers)
+        let rows = file.holdings.map { (t, h) -> PortfolioRow in
+            let quote = q[t]
+            return PortfolioRow(ticker: t, shares: h.shares, avgCost: h.avgCost,
+                                price: quote?.price ?? h.avgCost,
+                                dayChange: quote?.change ?? 0)
+        }.sorted { $0.value > $1.value }
+        return (rows, file.cash ?? 0)
+    }
 }
