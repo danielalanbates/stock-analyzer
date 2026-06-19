@@ -290,10 +290,31 @@ def rank_recommendations(universe=None, top_n=10, period="2y",
     return results[:top_n]
 
 
-if __name__ == "__main__":
-    top = rank_recommendations(top_n=10, log=print)
-    print("\n=== TOP 10 RECOMMENDATIONS ===")
+def _cli():
+    import argparse
+    import json
+    import sys
+    p = argparse.ArgumentParser(description="BatesAI Recommendation Engine")
+    p.add_argument("-n", type=int, default=10, help="number of picks")
+    p.add_argument("--fast", action="store_true", help="use the lean FAST_UNIVERSE")
+    p.add_argument("--json", action="store_true", help="emit JSON (for frontends)")
+    p.add_argument("--cache", default=None, help="cache directory")
+    args = p.parse_args()
+
+    universe = FAST_UNIVERSE if args.fast else DEFAULT_UNIVERSE
+    # In --json mode keep stdout clean; route progress to stderr.
+    log = (lambda m: print(m, file=sys.stderr)) if args.json else print
+    top = rank_recommendations(universe=universe, top_n=args.n,
+                               cache_dir=args.cache, log=log)
+    if args.json:
+        print(json.dumps(top))
+        return
+    print("\n=== TOP RECOMMENDATIONS ===")
     print(f"{'Rank':<5}{'Ticker':<8}{'Points':<8}{'Price':<10}{'12-1 Mom':<10}{'Drivers'}")
     for i, r in enumerate(top, 1):
         print(f"{i:<5}{r['ticker']:<8}{r['score']:<8}${r['price']:<9.2f}"
               f"{r['momentum_12_1']:<10}{r['drivers']}")
+
+
+if __name__ == "__main__":
+    _cli()
