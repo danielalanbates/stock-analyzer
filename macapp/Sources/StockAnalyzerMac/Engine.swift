@@ -17,6 +17,17 @@ final class RecommendationEngine {
         "/usr/bin/python3",
     ]
 
+    /// The bundled standalone engine binary, if this is a packaged .app.
+    private var bundledEngine: String? {
+        if let env = ProcessInfo.processInfo.environment["STOCKANALYZER_CLI"] { return env }
+        if let res = Bundle.main.resourceURL?
+            .appendingPathComponent("engine/engine_cli").path,
+           FileManager.default.isExecutableFile(atPath: res) {
+            return res
+        }
+        return nil
+    }
+
     private func python() -> String {
         if let env = ProcessInfo.processInfo.environment["STOCKANALYZER_PYTHON"] {
             return env
@@ -29,16 +40,38 @@ final class RecommendationEngine {
         ProcessInfo.processInfo.environment["STOCKANALYZER_ENGINE"] ?? Self.defaultEngineDir
     }
 
-    /// Runs a Python script in the engine dir and returns raw stdout JSON.
-    private func runJSON(script: String, _ extra: [String]) async throws -> Data {
+    /// Writable support directory for cache + portfolio (works in a sandboxed app).
+    static func supportDir() -> String {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("StockAnalyzer", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.path
+    }
+
+    private func cacheDir() -> String {
+        let c = "\(Self.supportDir())/cache"
+        try? FileManager.default.createDirectory(atPath: c, withIntermediateDirectories: true)
+        return c
+    }
+
+    /// Runs the engine for one tool ("rec" or "data") and returns stdout JSON.
+    /// Prefers the bundled standalone binary; falls back to python + scripts in dev.
+    private func runJSON(tool: String, _ toolArgs: [String]) async throws -> Data {
         let dir = engineDir()
+        let bundled = bundledEngine
         let py = python()
+        let script = tool == "rec" ? "recommendation_engine.py" : "data_cli.py"
         return try await withCheckedThrowingContinuation { cont in
             DispatchQueue.global().async {
                 let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: py)
-                proc.arguments = [script] + extra
-                proc.currentDirectoryURL = URL(fileURLWithPath: dir)
+                if let bin = bundled {
+                    proc.executableURL = URL(fileURLWithPath: bin)
+                    proc.arguments = [tool] + toolArgs
+                } else {
+                    proc.executableURL = URL(fileURLWithPath: py)
+                    proc.arguments = [script] + toolArgs
+                    proc.currentDirectoryURL = URL(fileURLWithPath: dir)
+                }
                 let out = Pipe()
                 proc.standardOutput = out
                 proc.standardError = Pipe()  // discard progress noise
@@ -50,7 +83,7 @@ final class RecommendationEngine {
                         cont.resume(throwing: NSError(
                             domain: "StockAnalyzer", code: Int(proc.terminationStatus),
                             userInfo: [NSLocalizedDescriptionKey:
-                                "\(script) exited with status \(proc.terminationStatus)"]))
+                                "engine (\(tool)) exited with status \(proc.terminationStatus)"]))
                     } else {
                         cont.resume(returning: data)
                     }
@@ -61,41 +94,50 @@ final class RecommendationEngine {
         }
     }
 
-    /// Runs `recommendation_engine.py --json` and decodes the result.
+    /// Top recommendations.
     func fetch(count: Int = 10, fast: Bool = true) async throws -> [Recommendation] {
-        let cache = "\(engineDir())/cache"
-        var args = ["-n", "\(count)", "--json", "--cache", cache]
+        var args = ["-n", "\(count)", "--json", "--cache", cacheDir()]
         if fast { args.append("--fast") }
-        let data = try await runJSON(script: "recommendation_engine.py", args)
+        let data = try await runJSON(tool: "rec", args)
         return try JSONDecoder().decode([Recommendation].self, from: data)
     }
 
-    /// Runs `data_cli.py history TICKER --period P`.
+    /// Price history with indicator overlays.
     func history(_ ticker: String, period: String = "1y") async throws -> PriceHistory {
-        let data = try await runJSON(script: "data_cli.py",
-                                     ["history", ticker, "--period", period])
+        let data = try await runJSON(tool: "data", ["history", ticker, "--period", period])
         return try JSONDecoder().decode(PriceHistory.self, from: data)
     }
 
-    /// Runs `data_cli.py screen --fast -n N`.
+    /// Momentum screen.
     func screen(fast: Bool = true, count: Int = 40) async throws -> [ScreenRow] {
         var args = ["screen", "-n", "\(count)"]
         if fast { args.append("--fast") }
-        let data = try await runJSON(script: "data_cli.py", args)
+        let data = try await runJSON(tool: "data", args)
         return try JSONDecoder().decode([ScreenRow].self, from: data)
     }
 
-    /// Reads the local portfolio.json (no brokerage needed).
+    /// Reads portfolio.json from the writable support dir, seeding a default if absent.
     func portfolioFile() throws -> PortfolioFile {
-        let url = URL(fileURLWithPath: "\(engineDir())/portfolio.json")
-        let data = try Data(contentsOf: url)
+        let path = "\(Self.supportDir())/portfolio.json"
+        if !FileManager.default.fileExists(atPath: path) {
+            // Seed from a bundled default or the dev engine dir, else an empty book.
+            let seed = Bundle.main.resourceURL?.appendingPathComponent("engine/portfolio.json").path
+                ?? "\(engineDir())/portfolio.json"
+            if FileManager.default.fileExists(atPath: seed) {
+                try? FileManager.default.copyItem(atPath: seed, toPath: path)
+            } else {
+                let empty = #"{"holdings":{},"cash":0}"#
+                try? empty.write(toFile: path, atomically: true, encoding: .utf8)
+            }
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
         return try JSONDecoder().decode(PortfolioFile.self, from: data)
     }
 
-    /// Runs `data_cli.py quotes T1 T2 …`.
+    /// Latest quotes for the given tickers.
     func quotes(_ tickers: [String]) async throws -> [String: Quote] {
         guard !tickers.isEmpty else { return [:] }
-        let data = try await runJSON(script: "data_cli.py", ["quotes"] + tickers)
+        let data = try await runJSON(tool: "data", ["quotes"] + tickers)
         return try JSONDecoder().decode([String: Quote].self, from: data)
     }
 
