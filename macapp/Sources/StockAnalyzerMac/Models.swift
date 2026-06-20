@@ -104,6 +104,50 @@ extension ISO8601DateFormatter {
     }()
 }
 
+// MARK: - Brokerage (Alpaca)
+
+struct BrokerStatus: Decodable {
+    let configured: Bool
+    let paper: Bool?
+    let ok: Bool?
+    let error: String?
+    let message: String?
+}
+
+struct BrokerAccount: Decodable {
+    let configured: Bool
+    let cash: Double?
+    let equity: Double?
+    let buyingPower: Double?
+    let longMarketValue: Double?
+    enum CodingKeys: String, CodingKey {
+        case configured, cash, equity
+        case buyingPower = "buying_power"
+        case longMarketValue = "long_market_value"
+    }
+}
+
+struct BrokerPosition: Identifiable, Decodable {
+    var id: String { ticker }
+    let ticker: String
+    let qty: Double
+    let avgCost: Double
+    let price: Double
+    let value: Double
+    let pnl: Double
+    let pnlPct: Double
+    enum CodingKeys: String, CodingKey {
+        case ticker, qty, price, value, pnl
+        case avgCost = "avg_cost"
+        case pnlPct = "pnl_pct"
+    }
+}
+
+struct BrokerPositionsResponse: Decodable {
+    let configured: Bool
+    let positions: [BrokerPosition]
+}
+
 // MARK: - Portfolio
 
 struct Quote: Decodable { let price: Double; let change: Double }

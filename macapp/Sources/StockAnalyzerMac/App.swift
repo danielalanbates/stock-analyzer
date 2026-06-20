@@ -21,6 +21,7 @@ enum Section: String, CaseIterable, Identifiable {
     case watchlist = "Watchlist"
     case alerts = "Price Alerts"
     case portfolio = "Portfolio"
+    case brokerage = "Brokerage"
     var id: String { rawValue }
     var symbol: String {
         switch self {
@@ -30,6 +31,7 @@ enum Section: String, CaseIterable, Identifiable {
         case .watchlist: return "eye.fill"
         case .alerts: return "bell.fill"
         case .portfolio: return "briefcase.fill"
+        case .brokerage: return "building.columns.fill"
         }
     }
 }
@@ -71,6 +73,8 @@ struct RootView: View {
                     chartTicker = ticker
                     section = .chart
                 }
+            case .brokerage:
+                BrokerageView()
             }
         }
     }

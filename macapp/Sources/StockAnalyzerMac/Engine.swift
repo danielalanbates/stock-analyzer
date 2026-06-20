@@ -122,6 +122,35 @@ final class RecommendationEngine {
         return try JSONDecoder().decode([ScreenRow].self, from: data)
     }
 
+    // MARK: Brokerage (Alpaca)
+
+    func brokerStatus() async throws -> BrokerStatus {
+        let data = try await runJSON(tool: "broker", ["status"])
+        return try JSONDecoder().decode(BrokerStatus.self, from: data)
+    }
+
+    func brokerAccount() async throws -> BrokerAccount {
+        let data = try await runJSON(tool: "broker", ["account"])
+        return try JSONDecoder().decode(BrokerAccount.self, from: data)
+    }
+
+    func brokerPositions() async throws -> [BrokerPosition] {
+        let data = try await runJSON(tool: "broker", ["positions"])
+        return try JSONDecoder().decode(BrokerPositionsResponse.self, from: data).positions
+    }
+
+    /// Writes Alpaca credentials to App Support/StockAnalyzer/broker.json.
+    func saveBrokerKeys(keyId: String, secret: String, paper: Bool) throws {
+        let path = "\(Self.supportDir())/broker.json"
+        let obj: [String: Any] = ["key_id": keyId, "secret": secret, "paper": paper]
+        let data = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted])
+        try data.write(to: URL(fileURLWithPath: path))
+    }
+
+    func brokerConfigured() -> Bool {
+        FileManager.default.fileExists(atPath: "\(Self.supportDir())/broker.json")
+    }
+
     /// Reads portfolio.json from the writable support dir, seeding a default if absent.
     func portfolioFile() throws -> PortfolioFile {
         let path = "\(Self.supportDir())/portfolio.json"
