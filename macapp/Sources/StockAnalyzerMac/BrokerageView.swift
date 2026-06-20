@@ -57,7 +57,7 @@ struct BrokerageView: View {
                     .foregroundStyle(Color(red: 0.91, green: 0.27, blue: 0.38))
                 if let s = model.status, s.configured {
                     Text(s.paper == true ? "PAPER" : "LIVE")
-                        .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                        .font(.system(size: 14)).padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.secondary.opacity(0.2)).clipShape(Capsule())
                 }
                 Spacer()
@@ -113,9 +113,9 @@ struct BrokerageView: View {
     private var connectForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Connect Alpaca for real-time quotes & live account sync")
-                .font(.headline)
+                .font(.system(size: 14, weight: .semibold))
             Text("A free Alpaca paper-trading account unlocks real-time market data and your live positions. Create one at alpaca.markets → Paper Trading → API Keys, then paste them here.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 14)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
@@ -145,11 +145,11 @@ struct BrokerageView: View {
 
                 if let s = model.status, s.configured, s.ok == false, let e = s.error {
                     Label(e, systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.system(size: 14)).foregroundStyle(.orange)
                 }
             }
             Text("Keys are stored locally in ~/Library/Application Support/StockAnalyzer/broker.json and never leave your machine.")
-                .font(.caption2).foregroundStyle(.secondary)
+                .font(.system(size: 14)).foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(maxWidth: 560, alignment: .leading)
@@ -157,7 +157,7 @@ struct BrokerageView: View {
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(label).font(.system(size: 14)).foregroundStyle(.secondary)
             Text(value).font(.title3.weight(.semibold))
         }
     }

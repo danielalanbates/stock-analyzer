@@ -14,7 +14,7 @@ struct AlertsView: View {
                 Spacer()
                 if store.monitorActive {
                     Label("Monitoring", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.caption).foregroundStyle(.green)
+                        .font(.system(size: 14)).foregroundStyle(.green)
                 }
             }.padding(12)
 
@@ -49,7 +49,7 @@ struct AlertsView: View {
                             if let p = a.lastPrice {
                                 Text(String(format: "now $%.2f", p)).foregroundStyle(.secondary)
                             }
-                            if a.triggered { Text("TRIGGERED").font(.caption).foregroundStyle(.green) }
+                            if a.triggered { Text("TRIGGERED").font(.system(size: 14)).foregroundStyle(.green) }
                             Spacer()
                             Button { store.toggleAlert(a) } label: {
                                 Image(systemName: a.enabled ? "pause" : "play")

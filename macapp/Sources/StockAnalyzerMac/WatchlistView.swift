@@ -13,7 +13,7 @@ struct WatchlistView: View {
                     .foregroundStyle(Color(red: 0.91, green: 0.27, blue: 0.38))
                 if stream.streaming {
                     Label("LIVE", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.caption).foregroundStyle(.green)
+                        .font(.system(size: 14)).foregroundStyle(.green)
                 }
                 Spacer()
                 TextField("Add ticker", text: $newTicker)

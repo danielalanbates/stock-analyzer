@@ -7,6 +7,7 @@ struct StockAnalyzerMacApp: App {
         WindowGroup("BatesAI — Stock Analyzer") {
             RootView()
                 .frame(minWidth: 980, minHeight: 640)
+                .environment(\.font, .system(size: 14))   // minimum 14pt everywhere
                 .environmentObject(store)
                 .onAppear { store.load() }
         }
@@ -122,8 +123,8 @@ struct RecommendationsView: View {
                 Spacer()
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle").font(.largeTitle)
-                    Text("Couldn't run the engine").font(.headline)
-                    Text(err).font(.caption).foregroundStyle(.secondary)
+                    Text("Couldn't run the engine").font(.system(size: 14, weight: .semibold))
+                    Text(err).font(.system(size: 14)).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center).padding(.horizontal)
                 }
                 Spacer()
@@ -142,12 +143,12 @@ struct RecommendationsView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(Color(red: 0.91, green: 0.27, blue: 0.38))
                 Text("Recommendation Points 0–100 · 100 = best deal imaginable, 0 = guaranteed to tank")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
             }
             Spacer()
             if let d = model.lastUpdated {
                 Text(d.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
             }
             Button(action: model.refresh) {
                 Label("Re-run", systemImage: "arrow.clockwise")

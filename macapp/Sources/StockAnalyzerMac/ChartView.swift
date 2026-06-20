@@ -111,7 +111,7 @@ struct ChartView: View {
                 }.pickerStyle(.segmented).frame(width: 260)
                 Button("Load", action: model.load).disabled(model.loading)
                 Spacer()
-                Text(model.ticker).font(.headline)
+                Text(model.ticker).font(.system(size: 14, weight: .semibold))
             }
             HStack(spacing: 14) {
                 Picker("", selection: $candles) {
@@ -121,7 +121,7 @@ struct ChartView: View {
                 Toggle("Bollinger", isOn: $showBollinger)
                 Toggle("EMA 12/26", isOn: $showEMA)
                 Spacer()
-            }.toggleStyle(.checkbox).font(.caption)
+            }.toggleStyle(.checkbox).font(.system(size: 14))
         }.padding(12)
     }
 
@@ -171,13 +171,13 @@ struct ChartView: View {
             }
             if let chg = model.liveChange {
                 Text(String(format: "%+.2f%% today", chg))
-                    .font(.headline).foregroundStyle(chg >= 0 ? upColor : downColor)
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(chg >= 0 ? upColor : downColor)
             }
             Label("LIVE", systemImage: "dot.radiowaves.left.and.right")
-                .font(.caption).foregroundStyle(.green)
+                .font(.system(size: 14)).foregroundStyle(.green)
             Spacer()
             Text("\(model.intraday.count) one-minute bars · auto-refreshes")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 14)).foregroundStyle(.secondary)
         }
     }
 

@@ -50,8 +50,8 @@ struct PortfolioView: View {
             } else if let e = model.error {
                 Spacer()
                 VStack(spacing: 6) {
-                    Text("Couldn't load portfolio").font(.headline)
-                    Text(e).font(.caption).foregroundStyle(.secondary)
+                    Text("Couldn't load portfolio").font(.system(size: 14, weight: .semibold))
+                    Text(e).font(.system(size: 14)).foregroundStyle(.secondary)
                 }
                 Spacer()
             } else {
@@ -97,7 +97,7 @@ struct PortfolioView: View {
 
     private func stat(_ label: String, _ value: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(label).font(.system(size: 14)).foregroundStyle(.secondary)
             Text(value).font(.title3.weight(.semibold)).foregroundStyle(color)
         }
     }
