@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ssl
 import sys
 import urllib.request
 
@@ -22,6 +23,14 @@ import pandas as pd
 import yfinance as yf
 
 import recommendation_engine as eng
+
+# Use certifi's CA bundle when available so HTTPS works inside a frozen
+# (PyInstaller) app, where the system cert path isn't found.
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except Exception:  # pragma: no cover
+    _SSL_CTX = ssl.create_default_context()
 
 
 def _yahoo_chart(symbol: str, rng: str, interval: str) -> dict:
@@ -33,7 +42,7 @@ def _yahoo_chart(symbol: str, rng: str, interval: str) -> dict:
     url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
            f"?range={rng}&interval={interval}")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15, context=_SSL_CTX) as resp:
         data = json.load(resp)
     return data["chart"]["result"][0]
 

@@ -26,10 +26,18 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+# certifi CA bundle so HTTPS works inside a frozen (PyInstaller) app.
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except Exception:  # pragma: no cover
+    _SSL_CTX = ssl.create_default_context()
 
 
 def _config_path() -> Path:
@@ -60,7 +68,7 @@ def _request(url: str, key: str, secret: str) -> dict | list:
         "APCA-API-SECRET-KEY": secret,
         "Accept": "application/json",
     })
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15, context=_SSL_CTX) as resp:
         return json.loads(resp.read().decode())
 
 
