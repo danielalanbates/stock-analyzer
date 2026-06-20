@@ -108,6 +108,12 @@ final class RecommendationEngine {
         return try JSONDecoder().decode(PriceHistory.self, from: data)
     }
 
+    /// Near-real-time intraday bars for today.
+    func intraday(_ ticker: String, interval: String = "1m") async throws -> IntradayData {
+        let data = try await runJSON(tool: "data", ["intraday", ticker, "--interval", interval])
+        return try JSONDecoder().decode(IntradayData.self, from: data)
+    }
+
     /// Momentum screen.
     func screen(fast: Bool = true, count: Int = 40) async throws -> [ScreenRow] {
         var args = ["screen", "-n", "\(count)"]

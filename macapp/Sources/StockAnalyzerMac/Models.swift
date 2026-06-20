@@ -59,6 +59,33 @@ struct PriceHistory: Decodable {
     let bars: [PriceBar]
 }
 
+/// One intraday (near-real-time) bar from `data_cli.py intraday`.
+struct IntradayBar: Identifiable, Decodable {
+    var id: String { time }
+    let time: String
+    let close: Double
+    let volume: Int
+    var minute: Date { ISO8601DateFormatter.minuteFormatter.date(from: time) ?? Date() }
+}
+
+struct IntradayData: Decodable {
+    let ticker: String
+    let interval: String
+    let bars: [IntradayBar]
+    let last: Double?
+    let open: Double?
+    let change: Double?
+}
+
+extension ISO8601DateFormatter {
+    static let minuteFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+}
+
 /// One row from `data_cli.py screen`.
 struct ScreenRow: Identifiable, Decodable {
     var id: String { ticker }

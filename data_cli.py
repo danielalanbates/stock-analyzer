@@ -15,12 +15,27 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.request
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
 import recommendation_engine as eng
+
+
+def _yahoo_chart(symbol: str, rng: str, interval: str) -> dict:
+    """Hit Yahoo's chart endpoint directly (stdlib, no key).
+
+    More reliable than yfinance.download() for intraday in some environments,
+    which is why intraday/real-time quotes go through here.
+    """
+    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+           f"?range={rng}&interval={interval}")
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.load(resp)
+    return data["chart"]["result"][0]
 
 
 def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -76,48 +91,68 @@ def history(ticker: str, period: str = "1y") -> dict:
 
 
 def intraday(ticker: str, interval: str = "1m") -> dict:
-    """Today's intraday bars (near-real-time via Yahoo, ~1 min delayed, free)."""
-    period = "1d" if interval in ("1m", "2m", "5m") else "5d"
-    df = yf.download(ticker, period=period, interval=interval,
-                     progress=False, timeout=15, auto_adjust=True)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    if df.empty:
+    """Today's intraday bars (near-real-time via Yahoo's chart endpoint, free)."""
+    rng = "1d" if interval in ("1m", "2m", "5m") else "5d"
+    try:
+        r = _yahoo_chart(ticker, rng, interval)
+    except Exception:
         return {"ticker": ticker, "interval": interval, "bars": []}
-    close = df["Close"]
-    first = float(close.iloc[0])
-    last = float(close.iloc[-1])
+    ts = r.get("timestamp", []) or []
+    q = r["indicators"]["quote"][0]
+    closes, vols = q.get("close", []), q.get("volume", [])
+    import datetime as _dt
     bars = []
-    for i, (idx, _) in enumerate(df.iterrows()):
-        v = close.iloc[i]
+    for i, t in enumerate(ts):
+        c = closes[i] if i < len(closes) else None
+        if c is None:
+            continue
         bars.append({
-            "time": idx.strftime("%Y-%m-%d %H:%M"),
-            "close": None if pd.isna(v) else round(float(v), 4),
-            "volume": int(df["Volume"].iloc[i]) if not pd.isna(df["Volume"].iloc[i]) else 0,
+            "time": _dt.datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M"),
+            "close": round(float(c), 4),
+            "volume": int(vols[i]) if i < len(vols) and vols[i] else 0,
         })
+    last = bars[-1]["close"] if bars else None
+    first = bars[0]["close"] if bars else None
+    meta = r.get("meta", {})
+    # Prefer Yahoo's official previous close for the % change anchor.
+    prev = meta.get("chartPreviousClose") or first
     return {
         "ticker": ticker, "interval": interval, "bars": bars,
-        "last": round(last, 2), "open": round(first, 2),
-        "change": round((last / first - 1) * 100, 2) if first else 0.0,
+        "last": round(last, 2) if last else None,
+        "open": round(first, 2) if first else None,
+        "change": round((last / prev - 1) * 100, 2) if (last and prev) else 0.0,
     }
 
 
 def quotes(tickers: list) -> dict:
-    """Latest price + daily change for a set of tickers (for the portfolio view)."""
+    """Near-real-time price + intraday change via Yahoo's chart endpoint (free)."""
     out = {}
     for t in tickers:
         try:
-            df = yf.download(t, period="5d", interval="1d",
-                             progress=False, timeout=12, auto_adjust=True)
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-            c = df["Close"].dropna()
-            if len(c) >= 1:
-                price = float(c.iloc[-1])
-                chg = float(c.iloc[-1] / c.iloc[-2] - 1) * 100 if len(c) >= 2 else 0.0
-                out[t] = {"price": round(price, 2), "change": round(chg, 2)}
+            r = _yahoo_chart(t, "1d", "1m")
+            meta = r.get("meta", {})
+            price = meta.get("regularMarketPrice")
+            prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+            if price is None:
+                closes = [c for c in r["indicators"]["quote"][0].get("close", []) if c is not None]
+                price = closes[-1] if closes else None
+            if price is not None:
+                chg = ((price / prev - 1) * 100) if prev else 0.0
+                out[t] = {"price": round(float(price), 2), "change": round(float(chg), 2)}
         except Exception:
-            continue
+            # Fall back to daily close via yfinance if the chart endpoint fails.
+            try:
+                df = yf.download(t, period="5d", interval="1d",
+                                 progress=False, timeout=12, auto_adjust=True)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                c = df["Close"].dropna()
+                if len(c) >= 1:
+                    price = float(c.iloc[-1])
+                    chg = float(c.iloc[-1] / c.iloc[-2] - 1) * 100 if len(c) >= 2 else 0.0
+                    out[t] = {"price": round(price, 2), "change": round(chg, 2)}
+            except Exception:
+                continue
     return out
 
 

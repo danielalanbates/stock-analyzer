@@ -4,13 +4,18 @@ import Charts
 @MainActor
 final class ChartModel: ObservableObject {
     @Published var ticker = "SPY"
-    @Published var period = "1y"
+    @Published var period = "LIVE"
     @Published var bars: [PriceBar] = []
+    @Published var intraday: [IntradayBar] = []
+    @Published var liveLast: Double?
+    @Published var liveChange: Double?
     @Published var loading = false
     @Published var error: String?
 
-    let periods = ["3mo", "6mo", "1y", "2y", "5y"]
+    let periods = ["LIVE", "3mo", "6mo", "1y", "2y", "5y"]
+    var isLive: Bool { period == "LIVE" }
     private let engine = RecommendationEngine()
+    private var liveTimer: Timer?
 
     func load() {
         guard !loading else { return }
@@ -18,9 +23,37 @@ final class ChartModel: ObservableObject {
         let t = ticker.trimmingCharacters(in: .whitespaces).uppercased()
         let p = period
         Task {
-            do { self.bars = try await engine.history(t, period: p).bars }
-            catch { self.error = error.localizedDescription }
+            do {
+                if p == "LIVE" {
+                    let d = try await engine.intraday(t, interval: "1m")
+                    self.intraday = d.bars; self.liveLast = d.last; self.liveChange = d.change
+                    self.startLiveTimer()
+                } else {
+                    self.stopLiveTimer()
+                    self.bars = try await engine.history(t, period: p).bars
+                }
+            } catch { self.error = error.localizedDescription }
             self.loading = false
+        }
+    }
+
+    private func startLiveTimer() {
+        guard liveTimer == nil else { return }
+        let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshLive() }
+        }
+        RunLoop.main.add(t, forMode: .common); liveTimer = t
+    }
+
+    func stopLiveTimer() { liveTimer?.invalidate(); liveTimer = nil }
+
+    private func refreshLive() {
+        guard isLive else { stopLiveTimer(); return }
+        let t = ticker.trimmingCharacters(in: .whitespaces).uppercased()
+        Task {
+            if let d = try? await engine.intraday(t, interval: "1m") {
+                self.intraday = d.bars; self.liveLast = d.last; self.liveChange = d.change
+            }
         }
     }
 }
@@ -41,10 +74,14 @@ struct ChartView: View {
         VStack(spacing: 0) {
             controls
             Divider()
-            if model.loading && model.bars.isEmpty {
+            if model.loading && model.bars.isEmpty && model.intraday.isEmpty {
                 Spacer(); ProgressView("Loading \(model.ticker)…"); Spacer()
             } else if let e = model.error {
                 Spacer(); Text(e).foregroundStyle(.secondary); Spacer()
+            } else if model.isLive {
+                liveHeader.padding(.horizontal, 12).padding(.top, 6)
+                liveChart.padding(12)
+                Spacer()
             } else {
                 ScrollView {
                     priceChart.frame(height: 360).padding(12)
@@ -123,6 +160,37 @@ struct ChartView: View {
                 }
             }
         }
+    }
+
+    private var liveHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            if let last = model.liveLast {
+                Text(String(format: "$%.2f", last)).font(.system(size: 26, weight: .bold))
+            }
+            if let chg = model.liveChange {
+                Text(String(format: "%+.2f%% today", chg))
+                    .font(.headline).foregroundStyle(chg >= 0 ? upColor : downColor)
+            }
+            Label("LIVE", systemImage: "dot.radiowaves.left.and.right")
+                .font(.caption).foregroundStyle(.green)
+            Spacer()
+            Text("\(model.intraday.count) one-minute bars · auto-refreshes")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var liveChart: some View {
+        let up = (model.liveChange ?? 0) >= 0
+        return Chart(model.intraday) { b in
+            LineMark(x: .value("Time", b.minute), y: .value("Price", b.close))
+                .foregroundStyle(up ? upColor : downColor)
+            AreaMark(x: .value("Time", b.minute), y: .value("Price", b.close))
+                .foregroundStyle(.linearGradient(
+                    colors: [(up ? upColor : downColor).opacity(0.25), .clear],
+                    startPoint: .top, endPoint: .bottom))
+        }
+        .chartYScale(domain: .automatic(includesZero: false))
+        .frame(minHeight: 400)
     }
 
     private var priceChart: some View {
