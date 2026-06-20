@@ -75,6 +75,33 @@ def history(ticker: str, period: str = "1y") -> dict:
     return {"ticker": ticker, "period": period, "bars": bars}
 
 
+def intraday(ticker: str, interval: str = "1m") -> dict:
+    """Today's intraday bars (near-real-time via Yahoo, ~1 min delayed, free)."""
+    period = "1d" if interval in ("1m", "2m", "5m") else "5d"
+    df = yf.download(ticker, period=period, interval=interval,
+                     progress=False, timeout=15, auto_adjust=True)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    if df.empty:
+        return {"ticker": ticker, "interval": interval, "bars": []}
+    close = df["Close"]
+    first = float(close.iloc[0])
+    last = float(close.iloc[-1])
+    bars = []
+    for i, (idx, _) in enumerate(df.iterrows()):
+        v = close.iloc[i]
+        bars.append({
+            "time": idx.strftime("%Y-%m-%d %H:%M"),
+            "close": None if pd.isna(v) else round(float(v), 4),
+            "volume": int(df["Volume"].iloc[i]) if not pd.isna(df["Volume"].iloc[i]) else 0,
+        })
+    return {
+        "ticker": ticker, "interval": interval, "bars": bars,
+        "last": round(last, 2), "open": round(first, 2),
+        "change": round((last / first - 1) * 100, 2) if first else 0.0,
+    }
+
+
 def quotes(tickers: list) -> dict:
     """Latest price + daily change for a set of tickers (for the portfolio view)."""
     out = {}
@@ -127,6 +154,9 @@ def main():
     s.add_argument("-n", type=int, default=50)
     q = sub.add_parser("quotes")
     q.add_argument("tickers", nargs="+")
+    intr = sub.add_parser("intraday")
+    intr.add_argument("ticker")
+    intr.add_argument("--interval", default="1m")
     args = p.parse_args()
 
     if args.cmd == "history":
@@ -135,6 +165,8 @@ def main():
         print(json.dumps(screen(args.fast, args.n)))
     elif args.cmd == "quotes":
         print(json.dumps(quotes([t.upper() for t in args.tickers])))
+    elif args.cmd == "intraday":
+        print(json.dumps(intraday(args.ticker.upper(), args.interval)))
     else:
         p.print_help(sys.stderr)
         sys.exit(1)

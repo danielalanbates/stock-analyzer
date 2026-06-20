@@ -26,6 +26,9 @@ def main():
     elif mode == "data":
         import data_cli as m
         m.main()
+    elif mode == "broker":
+        import broker_cli as m
+        m.main()
     else:
         print(f"unknown mode: {mode}", file=sys.stderr)
         sys.exit(2)
