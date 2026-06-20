@@ -108,6 +108,12 @@ final class RecommendationEngine {
         return try JSONDecoder().decode(PriceHistory.self, from: data)
     }
 
+    /// Comprehensive financials for one ticker.
+    func info(_ ticker: String) async throws -> StockInfo {
+        let data = try await runJSON(tool: "data", ["info", ticker])
+        return try JSONDecoder().decode(StockInfo.self, from: data)
+    }
+
     /// Near-real-time intraday bars for today.
     func intraday(_ ticker: String, interval: String = "1m") async throws -> IntradayData {
         let data = try await runJSON(tool: "data", ["intraday", ticker, "--interval", interval])

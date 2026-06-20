@@ -22,7 +22,9 @@ enum Section: String, CaseIterable, Identifiable {
     case watchlist = "Watchlist"
     case alerts = "Price Alerts"
     case portfolio = "Portfolio"
+    case details = "Stock Details"
     case brokerage = "Brokerage"
+    case help = "Help & Manual"
     var id: String { rawValue }
     var symbol: String {
         switch self {
@@ -32,7 +34,9 @@ enum Section: String, CaseIterable, Identifiable {
         case .watchlist: return "eye.fill"
         case .alerts: return "bell.fill"
         case .portfolio: return "briefcase.fill"
+        case .details: return "doc.text.magnifyingglass"
         case .brokerage: return "building.columns.fill"
+        case .help: return "questionmark.circle.fill"
         }
     }
 }
@@ -74,8 +78,13 @@ struct RootView: View {
                     chartTicker = ticker
                     section = .chart
                 }
+            case .details:
+                DetailsView(initialTicker: chartTicker)
+                    .id(chartTicker ?? "details")
             case .brokerage:
                 BrokerageView()
+            case .help:
+                HelpView()
             }
         }
     }
@@ -144,6 +153,7 @@ struct RecommendationsView: View {
                     .foregroundStyle(Color(red: 0.91, green: 0.27, blue: 0.38))
                 Text("Recommendation Points 0–100 · 100 = best deal imaginable, 0 = guaranteed to tank")
                     .font(.system(size: 14)).foregroundStyle(.secondary)
+                    .help("Each pick blends a technical score (price momentum + a strategy backtest) with a fundamentals score (valuation, growth, quality). Tech and Fund. columns show those two parts; Rec. Points is the blend. Double-click a row to chart it. See Help & Manual for the full method.")
             }
             Spacer()
             if let d = model.lastUpdated {

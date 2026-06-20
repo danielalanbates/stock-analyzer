@@ -104,6 +104,47 @@ extension ISO8601DateFormatter {
     }()
 }
 
+// MARK: - Comprehensive stock info
+
+struct StockInfo: Decodable {
+    let ticker: String
+    let name: String?
+    let type: String?
+    let sector: String?
+    let industry: String?
+    let currency: String?
+    let exchange: String?
+    let price: Double?
+    let previousClose: Double?
+    let open: Double?
+    let dayLow: Double?
+    let dayHigh: Double?
+    let fiftyTwoWeekLow: Double?
+    let fiftyTwoWeekHigh: Double?
+    let marketCap: Double?
+    let sharesOutstanding: Double?
+    let volume: Double?
+    let avgVolume: Double?
+    let trailingPE: Double?
+    let forwardPE: Double?
+    let pegRatio: Double?
+    let priceToBook: Double?
+    let eps: Double?
+    let forwardEps: Double?
+    let profitMargin: Double?
+    let roe: Double?
+    let revenueGrowth: Double?
+    let totalRevenue: Double?
+    let freeCashflow: Double?
+    let debtToEquity: Double?
+    let dividendYield: Double?
+    let beta: Double?
+    let targetMeanPrice: Double?
+    let recommendation: String?
+    let numAnalysts: Double?
+    let summary: String?
+}
+
 // MARK: - Brokerage (Alpaca)
 
 struct BrokerStatus: Decodable {

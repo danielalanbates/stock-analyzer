@@ -109,6 +109,7 @@ struct ChartView: View {
                 Picker("", selection: $model.period) {
                     ForEach(model.periods, id: \.self) { Text($0) }
                 }.pickerStyle(.segmented).frame(width: 260)
+                    .help("Time span. LIVE = today, 1-minute, auto-refreshing. MAX = the stock's entire history back to its IPO.")
                 Button("Load", action: model.load).disabled(model.loading)
                 Spacer()
                 Text(model.ticker).font(.system(size: 14, weight: .semibold))
@@ -117,9 +118,13 @@ struct ChartView: View {
                 Picker("", selection: $candles) {
                     Text("Candles").tag(true); Text("Line").tag(false)
                 }.pickerStyle(.segmented).frame(width: 150)
+                    .help("Candles show each period's open, high, low and close (green = up, red = down). Line shows just the closing price.")
                 Toggle("SMA 50/200", isOn: $showSMA)
+                    .help("Simple Moving Averages — the average price over the last 50 and 200 periods. Trend direction; the 50 crossing above the 200 is a classic bullish 'golden cross'.")
                 Toggle("Bollinger", isOn: $showBollinger)
+                    .help("Bollinger Bands — a volatility envelope around price. Price near the upper band = relatively high; near the lower = relatively low.")
                 Toggle("EMA 12/26", isOn: $showEMA)
+                    .help("Exponential Moving Averages — like SMAs but weighted to recent prices, so they react faster.")
                 Spacer()
             }.toggleStyle(.checkbox).font(.system(size: 14))
         }.padding(12)

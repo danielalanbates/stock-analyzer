@@ -133,6 +133,71 @@ def intraday(ticker: str, interval: str = "1m") -> dict:
     }
 
 
+def info(ticker: str) -> dict:
+    """Comprehensive financials for one ticker (equity / ETF / crypto).
+
+    Returns every common field Yahoo exposes; missing fields come back null so
+    the UI can show "—" for instruments that don't have them (ETFs, crypto).
+    """
+    try:
+        raw = yf.Ticker(ticker).info or {}
+    except Exception:
+        raw = {}
+
+    def g(*keys):
+        for k in keys:
+            v = raw.get(k)
+            if v not in (None, ""):
+                return v
+        return None
+
+    fmt_pct = lambda v: round(v * 100, 2) if isinstance(v, (int, float)) else None
+    return {
+        "ticker": ticker,
+        "name": g("longName", "shortName"),
+        "type": g("quoteType"),
+        "sector": g("sector"),
+        "industry": g("industry"),
+        "currency": g("currency"),
+        "exchange": g("fullExchangeName", "exchange"),
+        # Price / range
+        "price": g("currentPrice", "regularMarketPrice", "previousClose"),
+        "previousClose": g("previousClose", "regularMarketPreviousClose"),
+        "open": g("open", "regularMarketOpen"),
+        "dayLow": g("dayLow", "regularMarketDayLow"),
+        "dayHigh": g("dayHigh", "regularMarketDayHigh"),
+        "fiftyTwoWeekLow": g("fiftyTwoWeekLow"),
+        "fiftyTwoWeekHigh": g("fiftyTwoWeekHigh"),
+        # Size / volume
+        "marketCap": g("marketCap"),
+        "sharesOutstanding": g("sharesOutstanding"),
+        "volume": g("volume", "regularMarketVolume"),
+        "avgVolume": g("averageVolume", "averageDailyVolume10Day"),
+        # Valuation
+        "trailingPE": g("trailingPE"),
+        "forwardPE": g("forwardPE"),
+        "pegRatio": g("pegRatio", "trailingPegRatio"),
+        "priceToBook": g("priceToBook"),
+        "eps": g("trailingEps", "epsTrailingTwelveMonths"),
+        "forwardEps": g("forwardEps"),
+        # Profitability / growth
+        "profitMargin": fmt_pct(g("profitMargins")),
+        "roe": fmt_pct(g("returnOnEquity")),
+        "revenueGrowth": fmt_pct(g("revenueGrowth")),
+        "totalRevenue": g("totalRevenue"),
+        "freeCashflow": g("freeCashflow"),
+        "debtToEquity": g("debtToEquity"),
+        # Income / risk
+        "dividendYield": g("dividendYield"),
+        "beta": g("beta"),
+        # Analyst
+        "targetMeanPrice": g("targetMeanPrice"),
+        "recommendation": g("recommendationKey"),
+        "numAnalysts": g("numberOfAnalystOpinions"),
+        "summary": g("longBusinessSummary"),
+    }
+
+
 def quotes(tickers: list) -> dict:
     """Near-real-time price + intraday change via Yahoo's chart endpoint (free)."""
     out = {}
@@ -201,6 +266,8 @@ def main():
     intr = sub.add_parser("intraday")
     intr.add_argument("ticker")
     intr.add_argument("--interval", default="1m")
+    inf = sub.add_parser("info")
+    inf.add_argument("ticker")
     args = p.parse_args()
 
     if args.cmd == "history":
@@ -211,6 +278,8 @@ def main():
         print(json.dumps(quotes([t.upper() for t in args.tickers])))
     elif args.cmd == "intraday":
         print(json.dumps(intraday(args.ticker.upper(), args.interval)))
+    elif args.cmd == "info":
+        print(json.dumps(info(args.ticker.upper())))
     else:
         p.print_help(sys.stderr)
         sys.exit(1)
