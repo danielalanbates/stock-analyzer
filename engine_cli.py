@@ -29,6 +29,10 @@ def main():
     elif mode == "broker":
         import broker_cli as m
         m.main()
+    elif mode == "stream":
+        import stream_cli as m
+        syms = [s.upper() for s in sys.argv[1:]] or ["SPY", "BTC-USD"]
+        m.stream(syms)
     else:
         print(f"unknown mode: {mode}", file=sys.stderr)
         sys.exit(2)
