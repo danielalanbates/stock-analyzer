@@ -12,7 +12,7 @@ final class ChartModel: ObservableObject {
     @Published var loading = false
     @Published var error: String?
 
-    let periods = ["LIVE", "3mo", "6mo", "1y", "2y", "5y"]
+    let periods = ["LIVE", "6mo", "1y", "5y", "MAX"]
     var isLive: Bool { period == "LIVE" }
     private let engine = RecommendationEngine()
     private var liveTimer: Timer?
@@ -30,7 +30,9 @@ final class ChartModel: ObservableObject {
                     self.startLiveTimer()
                 } else {
                     self.stopLiveTimer()
-                    self.bars = try await engine.history(t, period: p).bars
+                    // "MAX" (inception) maps to yfinance's lowercase "max".
+                    let yp = p == "MAX" ? "max" : p
+                    self.bars = try await engine.history(t, period: yp).bars
                 }
             } catch { self.error = error.localizedDescription }
             self.loading = false
